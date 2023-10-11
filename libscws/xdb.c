@@ -9,21 +9,14 @@
 #	include "config.h"
 #endif
 
-#ifdef WIN32
-#	include "config_win32.h"
-#endif
+#include "compat.h"
 
 #include "xdb.h"
 #include "lock.h"
 #include <stdio.h>
 #include <stdlib.h>
-#ifndef WIN32
-#	include <unistd.h>
-#endif
 #include <string.h>
 #include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 
 #ifdef HAVE_FLOCK
 #   include <sys/file.h>

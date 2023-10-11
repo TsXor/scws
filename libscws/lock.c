@@ -22,6 +22,8 @@
 #	include "config.h"
 #endif
 
+#include "compat.h"
+
 #include <errno.h>
 #include "lock.h"
 
@@ -31,9 +33,11 @@
 #  include <sys/file.h>
 #endif
 
-#ifdef WIN32
-#  include "config_win32.h"
+#ifdef _WIN32
 #  include <winsock.h>
+#  ifndef EWOULDBLOCK
+#    define EWOULDBLOCK WSAEWOULDBLOCK
+#  endif
 #endif
 
 #ifdef NETWARE
@@ -71,7 +75,7 @@ int _xdb_flock(int fd, int operation)
 
 	return ret;
 }
-#elif defined(WIN32)
+#elif defined(_WIN32)
 /*
  * Program:   Unix compatibility routines
  *

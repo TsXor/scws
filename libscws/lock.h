@@ -34,11 +34,4 @@ int _xdb_flock(int fd, int operation);
 #	define LOCK_UN 8
 #endif
 
-#ifdef WIN32
-#   define EWOULDBLOCK WSAEWOULDBLOCK
-#	define fsync _commit
-#	define ftruncate(a, b) chsize(a, b)
-#	include <windows.h>
-#endif /* defined(WIN32) */
-
 #endif	/* LOCK_H */

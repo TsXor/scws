@@ -9,13 +9,12 @@
 #	include "config.h"
 #endif
 
+#include "compat.h"
+
 #include "xtree.h"
 #include "xdb.h"
 #include <stdio.h>
 #include <stdlib.h>
-#ifndef WIN32
-#	include <unistd.h>
-#endif
 #include <string.h>
 
 /* private static functions */
@@ -277,7 +276,7 @@ static void _xtree_reset_nodes(node_t *nodes, int low, int high, node_t *curr)
 	}
 }
 
-#ifdef WIN32
+#ifdef _MSC_VER
 static int _xtree_node_cmp(node_t *a, node_t *b)
 #else
 static int _xtree_node_cmp(a, b)

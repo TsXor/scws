@@ -9,9 +9,7 @@
 #	include "config.h"
 #endif
 
-#ifdef WIN32
-#	include "config_win32.h"
-#endif
+#include "compat.h"
  
 #include "scws.h"
 #include "xdict.h"

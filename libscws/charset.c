@@ -5,9 +5,7 @@
  * $Id$
  */
 
-#ifdef WIN32
-#	include "config_win32.h"
-#endif
+#include "compat.h"
 
 #include <stdio.h>
 #include <string.h>

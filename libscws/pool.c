@@ -5,12 +5,11 @@
  * $Id$
  */
 
+#include "compat.h"
+
 #include "pool.h"
 #include <stdio.h>
 #include <stdlib.h>
-#ifndef WIN32
-#	include <unistd.h>
-#endif
 #include <string.h>
 
 /** pool memory management */

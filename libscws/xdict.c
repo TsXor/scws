@@ -9,9 +9,7 @@
 #    include "config.h"
 #endif
 
-#ifdef WIN32
-#    include "config_win32.h"
-#endif
+#include "compat.h"
 
 #include "xdict.h"
 #include "xtree.h"
@@ -20,12 +18,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#ifndef WIN32
-#    include <sys/param.h>
-#endif
-#include <sys/types.h>
-#include <sys/stat.h>
 
 /* temp file format for TEXT xdb */
 #if !defined(PATH_MAX) || (PATH_MAX < 1024)
@@ -87,7 +79,7 @@ cont:
 }
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
 #    include <direct.h>
 
 static void _realpath(const char *src, char *dst)
@@ -122,7 +114,7 @@ static xdict_t _xdict_open_txt(const char *fpath, int mode, unsigned char *ml)
 		return NULL;
 
 	// check dest file & orginal file, compare there mtime
-#ifdef WIN32
+#ifdef _WIN32
 	{
 		char *tmp_ptr;
 		GetTempPath(sizeof(tmpfile) - 20, tmpfile);
