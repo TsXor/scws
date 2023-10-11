@@ -1350,7 +1350,7 @@ static inline int _attr_belong(const char *a, word_attr *at)
 	strncpy(at[cnt], xattr, 2);							\
 } while (0)
 
-scws_top_t scws_get_tops(scws_t s, int limit, char *xattr)
+scws_top_t scws_get_tops(scws_t s, int limit, const char *xattr)
 {
 	int off, cnt, xmode = SCWS_NA;
 	xtree_t xt;	
@@ -1456,7 +1456,7 @@ scws_top_t scws_get_tops(scws_t s, int limit, char *xattr)
 }
 
 // word check by attr.
-int scws_has_word(scws_t s, char *xattr)
+int scws_has_word(scws_t s, const char *xattr)
 {
 	int off, cnt, xmode = SCWS_NA;
 	scws_res_t res, cur;
@@ -1496,7 +1496,7 @@ int scws_has_word(scws_t s, char *xattr)
 }
 
 // get words by attr (rand order)
-scws_top_t scws_get_words(scws_t s, char *xattr)
+scws_top_t scws_get_words(scws_t s, const char *xattr)
 {
 	int off, cnt, xmode = SCWS_NA;
 	xtree_t xt;	

@@ -105,11 +105,11 @@ void scws_send_text(scws_t s, const char *text, int len);
 scws_res_t scws_get_result(scws_t s);
 void scws_free_result(scws_res_t result);
 
-scws_top_t scws_get_tops(scws_t s, int limit, char *xattr);
+scws_top_t scws_get_tops(scws_t s, int limit, const char *xattr);
 void scws_free_tops(scws_top_t tops);
 
-scws_top_t scws_get_words(scws_t s, char *xattr);
-int scws_has_word(scws_t s, char *xattr);
+scws_top_t scws_get_words(scws_t s, const char *xattr);
+int scws_has_word(scws_t s, const char *xattr);
 
 #ifdef __cplusplus
 }
