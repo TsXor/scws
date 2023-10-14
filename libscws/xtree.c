@@ -18,9 +18,27 @@
 #include <string.h>
 
 /* private static functions */
-static int _xtree_hasher(xtree_t xt, const char *s, int len)
+static int _xtree_key_cmp(node_t head, const char *key, scws_io_size_t len) {
+	/*
+		此函数用于取代_xtree_node_search的这一部分：
+		int cmp;
+		int hlen = strlen(head->key);
+		int clen = len < hlen ? len : hlen;
+		cmp = memcmp(key, head->key, clen);
+		if (cmp == 0) cmp = len - hlen;
+	*/
+	for (scws_io_size_t i = 0; i < len; i++) {
+		if (head->key[i] == 0) return 1; // 说明len - hlen > 0，返回正数
+		int diff = (int)key[i] - (int)head->key[i];
+		if (diff != 0) return diff;
+	}
+	if (head->key[len] == 0) return 0;
+	else return -1; // 说明len - hlen < 0，返回负数
+}
+
+static scws_io_size_t _xtree_hasher(xtree_t xt, const char *s, scws_io_size_t len)
 {
-	unsigned int h = xt->base;
+	scws_io_size_t h = xt->base;
 	while (len--)
 	{
 		h += (h<<5);
@@ -30,16 +48,9 @@ static int _xtree_hasher(xtree_t xt, const char *s, int len)
 	return (h % xt->prime);
 }
 
-static node_t _xtree_node_search(node_t head, node_t **pnode, const char *key, int len)
+static node_t _xtree_node_search(node_t head, node_t **pnode, const char *key, scws_io_size_t len)
 {
-	int cmp;	
-
-	int hlen = strlen(head->key);
-	int clen = len < hlen ? len : hlen;
-
-	cmp = memcmp(key, head->key, clen);
-	if (cmp == 0)
-		cmp = len - hlen;
+	int cmp = _xtree_key_cmp(head, key, len);
 	
 	if (cmp != 0)	
 	{
@@ -57,7 +68,7 @@ static node_t _xtree_node_search(node_t head, node_t **pnode, const char *key, i
 	return head;
 }
 
-static node_t _xtree_node_find(xtree_t xt, node_t **pnode, const char *key, int len)
+static node_t _xtree_node_find(xtree_t xt, node_t **pnode, const char *key, scws_io_size_t len)
 {	
 	int i;
 	i = (xt->prime > 1 ? _xtree_hasher(xt, key, len) : 0);
@@ -71,7 +82,7 @@ static node_t _xtree_node_find(xtree_t xt, node_t **pnode, const char *key, int 
 }
 
 /* public functions */
-xtree_t xtree_new(int base, int prime)
+xtree_t xtree_new(scws_io_size_t base, scws_io_size_t prime)
 {
 	xtree_t xnew;
 	pool_t p;
@@ -92,7 +103,7 @@ void xtree_free(xtree_t xt)
 		pool_free(xt->p);
 }
 
-void xtree_nput(xtree_t xt, void *value, int vlen, const char *key, int len)
+void xtree_nput(xtree_t xt, void *value, scws_io_size_t vlen, const char *key, scws_io_size_t len)
 {
 	node_t node, *pnode;
 
@@ -120,10 +131,10 @@ void xtree_nput(xtree_t xt, void *value, int vlen, const char *key, int len)
 void xtree_put(xtree_t xt, const char *value, const char *key)
 {
 	if (xt != NULL && key != NULL)
-		xtree_nput(xt, (void *) value, value ? strlen(value) : 0, key, strlen(key));
+		xtree_nput(xt, (void *) value, value ? (scws_io_size_t)strlen(value) : 0, key, (scws_io_size_t)strlen(key));
 }
 
-void *xtree_nget(xtree_t xt, const char *key, int len, int *vlen)
+void *xtree_nget(xtree_t xt, const char *key, scws_io_size_t len, scws_io_size_t *vlen)
 {
 	node_t node;
 
@@ -138,16 +149,16 @@ void *xtree_nget(xtree_t xt, const char *key, int len, int *vlen)
 	return node->value;
 }
 
-void *xtree_get(xtree_t xt, const char *key, int *vlen)
+void *xtree_get(xtree_t xt, const char *key, scws_io_size_t *vlen)
 {
 	if (xt == NULL || key == NULL)
 		return NULL;
 	
-	return xtree_nget(xt, key, strlen(key), vlen);
+	return xtree_nget(xt, key, (scws_io_size_t)strlen(key), vlen);
 }
 
 /*
-void xtree_ndel(xtree_t xt, const char *key, int len)
+void xtree_ndel(xtree_t xt, const char *key, scws_io_size_t len)
 {
 	xtree_nput(xt, NULL, 0, key, len);
 }
@@ -157,7 +168,7 @@ void xtree_del(xtree_t xt, const char *key)
 	if (xt == NULL || key == NULL)
 		return;
 	
-	xtree_ndel(xt, key, strlen(key));
+	xtree_ndel(xt, key, (scws_io_size_t)strlen(key));
 }
 */
 
@@ -238,75 +249,94 @@ void xtree_draw(xtree_t xt)
 #endif
 
 /* optimize the tree */
-static void _xtree_count_nodes(node_t node, int *count)
+static void _xtree_count_nodes_imp(node_t node, scws_io_size_t *count)
 {
 	if (node == NULL)
 		return;
 
 	*count += 1;
-	_xtree_count_nodes(node->left, count);
-	_xtree_count_nodes(node->right, count);
+	_xtree_count_nodes_imp(node->left, count);
+	_xtree_count_nodes_imp(node->right, count);
 }
 
-static void _xtree_load_nodes(node_t node, node_t *nodes, int *count)
+static scws_io_size_t _xtree_count_nodes(node_t node)
 {
-	int i = *count;
-	if (node == NULL)
-		return;
-	
-	nodes[i] = node;
-	*count = ++i;
-	_xtree_load_nodes(node->left, nodes, count);
-	_xtree_load_nodes(node->right, nodes, count);
+	scws_io_size_t cnt = 0;
+	_xtree_count_nodes_imp(node, &cnt);
+	return cnt;
 }
 
-static void _xtree_reset_nodes(node_t *nodes, int low, int high, node_t *curr)
+static void _xtree_load_nodes_imp(node_t node, node_t *dst, scws_io_size_t *count)
 {
-	if (low <= high)
-	{
-		int mid = (low + high)>>1;
-
-		*curr = nodes[mid];
-		_xtree_reset_nodes(nodes, low, mid-1, &(*curr)->left);
-		_xtree_reset_nodes(nodes, mid + 1, high, &(*curr)->right);
-	}
-	else
-	{
-		*curr = NULL;
-	}
+	if (node == NULL) return;
+	dst[*count] = node;
+	*count += 1;
+	_xtree_load_nodes_imp(node->left, dst, count);
+	_xtree_load_nodes_imp(node->right, dst, count);
 }
 
-#ifdef _MSC_VER
-static int _xtree_node_cmp(node_t *a, node_t *b)
-#else
+static scws_io_size_t _xtree_load_nodes(node_t head, node_t *dst)
+{
+	scws_io_size_t cnt = 0;
+	_xtree_load_nodes_imp(head, dst, &cnt);
+	return cnt;
+}
+
+static node_t _xtree_make_prefect_subtree(const node_t* ordered, unsigned char n_layer) {
+	if (n_layer == 0) return NULL;
+	if (n_layer == 1) return ordered[0];
+	// 1 ~ 2**n-1
+	for (scws_io_size_t i = 1; i >> n_layer == 0; i++) {
+		node_t cur = ordered[i - 1];
+		unsigned int n_tz = _bit_ctzll((unsigned long long)i);
+		if (n_tz) {
+			cur->left  = ordered[i - (1ULL << (n_tz - 1)) - 1];
+			cur->right = ordered[i + (1ULL << (n_tz - 1)) - 1];
+		} else {
+			cur->left  = NULL;
+			cur->right = NULL;
+		}
+	}
+	return ordered[(1ULL << (n_layer - 1)) - 1];
+}
+
+static node_t _xtree_reorganize_nodes(const node_t *ordered, const scws_io_size_t count)
+{	// TsXor: reorganize node with O(1) space and O(n) time
+	unsigned char n_layer = 0;
+	const node_t* sub = ordered + count;
+	node_t head = NULL;
+	for (scws_io_size_t left = count; left != 0; left >>= 1) {
+		node_t last_head = head;
+		head = sub[-1];
+		sub -= 1ULL << n_layer;
+		head->left = _xtree_make_prefect_subtree(sub, n_layer);
+		head->right = last_head;
+		n_layer++;
+	}
+	return head;
+}
+
 static int _xtree_node_cmp(a, b)
-	node_t *a, *b;
-#endif
+	const node_t *a, *b;
 {
 	return strcmp((*a)->key, (*b)->key);
 }
 
 void xtree_optimize(xtree_t xt)
 {
-	int i, cnt;
-	node_t *nodes;
+	if (!xt) return;
 
-	if (!xt)
-		return;	
-
-	for (i = 0; i < xt->prime; i++)
+	for (scws_io_size_t i = 0; i < xt->prime; i++)
 	{
-		cnt = 0;
-		_xtree_count_nodes(xt->trees[i], &cnt);
-		if (cnt > 2)			
-		{
-			nodes = (node_t *)malloc(sizeof(node_t) * cnt);
-			cnt = 0;
-			_xtree_load_nodes(xt->trees[i], nodes, &cnt);
-			qsort(nodes, cnt, sizeof(node_t), _xtree_node_cmp);
-			_xtree_reset_nodes(nodes, 0, cnt - 1, &xt->trees[i]);
-			free(nodes);
-		}
+		node_t tree_head = xt->trees[i];
+		scws_io_size_t n_tree_nodes = _xtree_count_nodes(tree_head);
+		if (n_tree_nodes <= 2) continue;			
+		
+		node_t *nodes_array = (node_t *)malloc(sizeof(node_t) * n_tree_nodes);
+		scws_io_size_t n_loaded = _xtree_load_nodes(tree_head, nodes_array);
+		qsort(nodes_array, n_loaded, sizeof(node_t), _xtree_node_cmp);
+		tree_head = _xtree_reorganize_nodes(nodes_array, n_loaded);
+		free(nodes_array);
 	}
 }
 
@@ -316,7 +346,7 @@ static void _xtree_to_xdb_node(node_t node, xdb_t x)
 	if (node == NULL)
 		return;
 
-	xdb_nput(x, node->value, node->vlen, node->key, strlen(node->key));
+	xdb_nput(x, node->value, node->vlen, node->key, (scws_io_size_t)strlen(node->key));
 	_xtree_to_xdb_node(node->left, x);
 	_xtree_to_xdb_node(node->right, x);
 }
@@ -324,12 +354,11 @@ static void _xtree_to_xdb_node(node_t node, xdb_t x)
 void xtree_to_xdb(xtree_t xt, const char *fpath)
 {
 	xdb_t x;
-	int i;
 
 	if (!xt || !(x = xdb_create(fpath, xt->base, xt->prime)))
 		return;
 
-	for (i = 0; i < xt->prime; i++)
+	for (scws_io_size_t i = 0; i < xt->prime; i++)
 	{
 		_xtree_to_xdb_node(xt->trees[i], x);
 	}

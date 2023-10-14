@@ -38,7 +38,7 @@ static int _xdb_hasher(xdb_t x, const char *s, int len)
 	return (h % x->prime);
 }
 
-static void _xdb_read_data(xdb_t x, void *buf, unsigned int off, int len)
+static void _xdb_read_data(xdb_t x, void *buf, scws_io_size_t off, scws_io_size_t len)
 {
 	/* check off & x->fsize? */
 	if (off > x->fsize)
@@ -159,7 +159,7 @@ xdb_t xdb_open(const char *fpath, int mode)
 	}
 	x->prime = xhdr.prime;
 	x->base = xhdr.base;
-	x->version = (int) xhdr.ver;
+	x->version = (scws_io_size_t) xhdr.ver;
 	x->fmap = NULL;
 	x->mode = mode;
 
@@ -187,7 +187,7 @@ xdb_t xdb_open(const char *fpath, int mode)
 	return x;
 }
 
-xdb_t xdb_create(const char *fpath, int base, int prime)
+xdb_t xdb_create(const char *fpath, scws_io_size_t base, scws_io_size_t prime)
 {
 	xdb_t x;
 	struct xdb_header xhdr;
@@ -255,7 +255,7 @@ void xdb_close(xdb_t x)
 }
 
 /* read mode (value require free by user) */
-void *xdb_nget(xdb_t x, const char *key, int len, unsigned int *vlen)
+void *xdb_nget(xdb_t x, const char *key, scws_io_size_t len, scws_io_size_t *vlen)
 {
 	xrec_st rec;
 	void *value = NULL;
@@ -277,15 +277,15 @@ void *xdb_nget(xdb_t x, const char *key, int len, unsigned int *vlen)
 	return value;
 }
 
-void *xdb_get(xdb_t x, const char *key, unsigned int *vlen)
+void *xdb_get(xdb_t x, const char *key, scws_io_size_t *vlen)
 {
 	if (x == NULL || key == NULL)
 		return NULL;
-	return xdb_nget(x, key, strlen(key), vlen);
+	return xdb_nget(x, key, (scws_io_size_t)strlen(key), vlen);
 }
 
 /* write mode */
-void xdb_nput(xdb_t x, void *value, unsigned int vlen, const char *key, int len)
+void xdb_nput(xdb_t x, void *value, scws_io_size_t vlen, const char *key, scws_io_size_t len)
 {
 	xrec_st rec;
 
@@ -447,123 +447,152 @@ typedef struct xdb_cmper
 	char *key;
 }	xcmper_st;
 
-static void _xdb_count_nodes(xdb_t x, xptr_t ptr, int *count)
+#pragma pack(push, 1)
+struct _xdb_node_data {
+	xptr_st left;
+	xptr_st right;
+	unsigned char klen;
+	char key[]; // null-terminated
+};
+#pragma pack(pop)
+
+static void _xdb_count_nodes_imp(xdb_t x, xptr_t ptr, scws_io_size_t *count, scws_io_size_t *klen)
 {
-	int off;
-	if (ptr->len == 0)
-		return;
+	if (ptr->len == 0) return;
 
 	*count += 1;
-	off = ptr->off;
+	scws_io_size_t off = ptr->off;
+	unsigned char cur_klen;
+	_xdb_read_data(x, &cur_klen, off + offsetof(struct _xdb_node_data, klen), sizeof(unsigned char));
+	*klen += cur_klen + 1;
 
 	/* left & right */
-	_xdb_read_data(x, ptr, off, sizeof(xptr_st));
-	_xdb_count_nodes(x, ptr, count);
-
-	_xdb_read_data(x, ptr, off + sizeof(xptr_st), sizeof(xptr_st));
-	_xdb_count_nodes(x, ptr, count);
+	_xdb_read_data(x, ptr, off + offsetof(struct _xdb_node_data, left), sizeof(xptr_st));
+	_xdb_count_nodes_imp(x, ptr, count, klen);
+	_xdb_read_data(x, ptr, off + offsetof(struct _xdb_node_data, right), sizeof(xptr_st));
+	_xdb_count_nodes_imp(x, ptr, count, klen);
 }
 
-#ifdef HAVE_STRNDUP
-#define	_mem_ndup		strndup
-#else
-static inline void *_mem_ndup(const char *src, int len)
-{
-	char *dst;
-	dst = malloc(len+1);
-	memcpy(dst, src, len);
-	dst[len] = '\0';
-	return dst;
+struct _xdb_node_cnt {
+	scws_io_size_t n;
+	scws_io_size_t klen;
+};
+
+static struct _xdb_node_cnt _xdb_count_nodes(xdb_t x, scws_io_size_t idx) {
+	xptr_st head;
+	scws_io_size_t cnt = 0;
+	scws_io_size_t klen_sum = 0;
+	scws_io_size_t poff = sizeof(struct xdb_header) + idx * sizeof(xptr_st);
+	_xdb_read_data(x, &head, poff, sizeof(xptr_st));
+	_xdb_count_nodes_imp(x, &head, &cnt, &klen_sum);
+	struct _xdb_node_cnt ret = {cnt, klen_sum};
+	return ret;
 }
-#endif
 
-static void _xdb_load_nodes(xdb_t x, xptr_t ptr, xcmper_st *nodes, int *count)
+static void _xdb_load_nodes_imp(xdb_t x, xptr_t ptr, xcmper_st *dst, scws_io_size_t *count, char *keys, scws_io_size_t *keys_used)
 {
-	int i;
-	unsigned char buf[XDB_MAXKLEN + 18];
+	if (ptr->len == 0) return;
 
-	if (ptr->len == 0)
-		return;
+	unsigned char node_data[sizeof(struct _xdb_node_data) + XDB_MAXKLEN + 1];
+	_xdb_read_data(x, node_data, ptr->off, ptr->len);
+	struct _xdb_node_data* node = (struct _xdb_node_data* )&node_data;
 
-	i = sizeof(buf)-1;
-	if (i > (int)ptr->len)
-		i = ptr->len;
-
-	_xdb_read_data(x, buf, ptr->off, i);
-
-	i = *count;
-	nodes[i].ptr.off = ptr->off;
-	nodes[i].ptr.len = ptr->len;
-	nodes[i].key = (char *) _mem_ndup(buf + 17, buf[16]);
-	*count = i+1;
+	*count += 1;
+	char* cur_key = keys + *keys_used;
+	memcpy(cur_key, &node->key, node->klen);
+	cur_key[node->klen] = 0;
+	*keys_used += node->klen + 1;
+	dst[*count].ptr = *ptr;
+	dst[*count].key = cur_key;
 
 	/* left & right */
-	memcpy(ptr, buf, sizeof(xptr_st));
-	_xdb_load_nodes(x, ptr, nodes, count);
+	memcpy(ptr, &node->left, sizeof(xptr_st));
+	_xdb_load_nodes_imp(x, ptr, dst, count, keys, keys_used);
 
-	memcpy(ptr, buf + sizeof(xptr_st), sizeof(xptr_st));
-	_xdb_load_nodes(x, ptr, nodes, count);
+	memcpy(ptr, &node->right, sizeof(xptr_st));
+	_xdb_load_nodes_imp(x, ptr, dst, count, keys, keys_used);
 }
 
-static void _xdb_reset_nodes(xdb_t x, xcmper_st *nodes, int low, int high, unsigned int poff)
+static scws_io_size_t _xdb_load_nodes(xdb_t x, scws_io_size_t idx, xcmper_st *dst, char *keys) {
+	xptr_st head;
+	scws_io_size_t cnt = 0, keys_used = 0;
+	scws_io_size_t poff = sizeof(struct xdb_header) + idx * sizeof(xptr_st);
+	_xdb_read_data(x, &head, poff, sizeof(xptr_st));
+	_xdb_load_nodes_imp(x, &head, dst, &cnt, keys, &keys_used);
+	return cnt;
+}
+
+static const xptr_st null_file_ptr = {0, 0};
+
+static const xcmper_st* _xdb_make_prefect_subtree(int fd, scws_io_size_t poff, const xcmper_st* ordered, unsigned char n_layer)
 {
-	xptr_st ptr = { 0, 0 };
-
-	if (low <= high)
-	{
-		int mid = (low + high)>>1;
-
-		memcpy(&ptr, &nodes[mid].ptr, sizeof(xptr_st));
-		
-		_xdb_reset_nodes(x, nodes, low, mid-1, ptr.off);
-		_xdb_reset_nodes(x, nodes, mid+1, high, ptr.off + sizeof(xptr_st));
+	if (n_layer == 0) return NULL;
+	if (n_layer == 1) return ordered;
+	// 1 ~ 2**n-1
+	for (scws_io_size_t i = 1; i >> n_layer == 0; i++) {
+		const xcmper_st* cur = &ordered[i - 1];
+		unsigned int n_tz = _bit_ctzll((unsigned long long)i);
+		if (n_tz) {
+			lseek(fd, poff + cur->ptr.off + offsetof(struct _xdb_node_data, left), SEEK_SET);
+			write(fd, &ordered[i - (1ULL << (n_tz - 1)) - 1].ptr, sizeof(xptr_st)); // left
+			lseek(fd, poff + cur->ptr.off + offsetof(struct _xdb_node_data, right), SEEK_SET);
+			write(fd, &ordered[i + (1ULL << (n_tz - 1)) - 1].ptr, sizeof(xptr_st)); // right
+		} else {
+			lseek(fd, poff + cur->ptr.off + offsetof(struct _xdb_node_data, left), SEEK_SET);
+			write(fd, &null_file_ptr, sizeof(xptr_st)); // left = NULL
+			lseek(fd, poff + cur->ptr.off + offsetof(struct _xdb_node_data, right), SEEK_SET);
+			write(fd, &null_file_ptr, sizeof(xptr_st)); // right = NULL
+		}
 	}
+	return &ordered[(1ULL << (n_layer - 1)) - 1];
+}
 
-	/* save it */
-	lseek(x->fd, poff, SEEK_SET);
-	write(x->fd, &ptr, sizeof(xptr_st));
+static const xcmper_st* _xdb_reorganize_nodes(xdb_t x, scws_io_size_t idx, xcmper_st *ordered, scws_io_size_t count)
+{
+	scws_io_size_t poff = sizeof(struct xdb_header) + idx * sizeof(xptr_st);
+	// TsXor: reorganize node with O(1) space and O(n) time
+	unsigned char n_layer = 0;
+	const xcmper_st* sub = ordered + count;
+	const xcmper_st* head = NULL;
+	for (scws_io_size_t left = count; left != 0; left >>= 1) {
+		const xcmper_st* last_head = head;
+		head = &sub[-1];
+		sub -= 1ULL << n_layer;
+		const xcmper_st* subtree = _xdb_make_prefect_subtree(x->fd, poff, sub, n_layer);
+		lseek(x->fd, poff + head->ptr.off + offsetof(struct _xdb_node_data, left), SEEK_SET);
+		write(x->fd, &subtree->ptr, sizeof(xptr_st)); // left
+		lseek(x->fd, poff + head->ptr.off + offsetof(struct _xdb_node_data, right), SEEK_SET);
+		write(x->fd, &last_head->ptr, sizeof(xptr_st)); // right
+		n_layer++;
+	}
+	return head;
 }
 
 static int _xdb_node_cmp(a, b)
-	xcmper_st *a, *b;
+	const xcmper_st *a, *b;
 {
 	return strcmp(a->key, b->key);
 }
 
 void xdb_optimize(xdb_t x)
 {
-	int i, cnt, poff;
-	xptr_st ptr, head;
-	xcmper_st *nodes;
+	if (x == NULL || x->fd < 0) return;	
 
-	if (x == NULL || x->fd < 0)
-		return;	
-
-	for (i = 0; i < x->prime; i++)
+	for (scws_io_size_t i = 0; i < x->prime; i++)
 	{
-		poff = i * sizeof(xptr_st) + sizeof(struct xdb_header);
-		_xdb_read_data(x, &head, poff, sizeof(xptr_st));
+		struct _xdb_node_cnt counts = _xdb_count_nodes(x, i);
+		if (counts.n <= 2) continue;
 
-		cnt = 0;
-		ptr = head;
-		_xdb_count_nodes(x, &ptr, &cnt);
+		xcmper_st *nodes_array = (xcmper_st *) malloc(sizeof(xcmper_st) * counts.n);
+		// TsXor: allocate spaces for all keys in one go
+		char *keys_buf = (char *) malloc(counts.klen);
+		scws_io_size_t n_loaded = _xdb_load_nodes(x, i, nodes_array, keys_buf);
+		qsort(nodes_array, n_loaded, sizeof(xcmper_st), _xdb_node_cmp);
+		_xdb_reorganize_nodes(x, i, nodes_array, n_loaded);
 
-		if (cnt > 2)
-		{
-			nodes = (xcmper_st *) malloc(sizeof(xcmper_st) * cnt);
-			
-			cnt = 0;
-			ptr = head;
-			_xdb_load_nodes(x, &ptr, nodes, &cnt);
-			
-			qsort(nodes, cnt, sizeof(xcmper_st), _xdb_node_cmp);
-			_xdb_reset_nodes(x, nodes, 0, cnt - 1, poff);
-
-			/* free the nodes & key pointer */
-			while (cnt--)
-				free(nodes[cnt].key);
-			free(nodes);
-		}
+		/* free the nodes & key pointer */
+		free(keys_buf);
+		free(nodes_array);
 	}
 }
 
@@ -608,7 +637,7 @@ static void _xdb_to_xtree_node(xdb_t x, xtree_t xt, xptr_t ptr)
 
 xtree_t xdb_to_xtree(xdb_t x, xtree_t xt)
 {
-	int i = 0;
+	scws_io_size_t i = 0;
 	xptr_st ptr;
 
 	if (!x)

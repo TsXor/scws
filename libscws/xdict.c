@@ -84,13 +84,13 @@ cont:
 
 static void _realpath(const char *src, char *dst)
 {
-	int len = strlen(src);
+	size_t len = strlen(src);
 	if (strchr(src, ':') != NULL)
 		memcpy(dst, src, len + 1);
 	else
 	{
 		char *ptr;
-		getcwd(dst, XDICT_PATH_MAX - len - 2);
+		getcwd(dst, XDICT_PATH_MAX - (int)len - 2);
 		ptr = dst + strlen(dst);
 		*ptr++ = '/';
 		memcpy(ptr, src, len + 1);
@@ -156,7 +156,7 @@ static xdict_t _xdict_open_txt(const char *fpath, int mode, unsigned char *ml)
 		return NULL;
 	else
 	{
-		int cl, kl;
+		scws_io_size_t cl, kl;
 		FILE *fp;
 		word_st word, *w;
 		char *key, *part, *last, *delim = " \t\r\n";
@@ -332,7 +332,7 @@ void xdict_close(xdict_t xd)
 #define	_FLAG_PART(x)	((x)->flag & SCWS_WORD_PART)
 #define	_FLAG_MALLOC(x)	((x)->flag & SCWS_WORD_MALLOCED)
 
-word_t xdict_query(xdict_t xd, const char *key, int len)
+word_t xdict_query(xdict_t xd, const char *key, scws_io_size_t len)
 {
 	word_t value, value2;
 

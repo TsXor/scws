@@ -40,7 +40,7 @@
 #define	SCWS_CHAR_TOKEN(x)		((x)=='('||(x)==')'||(x)=='['||(x)==']'||(x)=='{'||(x)=='}'||(x)==':'||(x)=='"')	
 ///hightman.070814: max zlen = ?? (4 * zlen * zlen = ??)
 #define	SCWS_MAX_ZLEN			128
-#define	SCWS_EN_IDF(x)			(float)(2.5*logf(x))
+#define	SCWS_EN_IDF(x)			(float)(2.5*logf((float)x))
 
 static const char *attr_en = "en";
 static const char *attr_un = "un";
@@ -1296,7 +1296,7 @@ static int _tops_cmp(a, b)
 	return -1;
 }
 
-static void _tops_load_node(node_t node, scws_top_t *values, int *start)
+static void _tops_load_node(node_t node, scws_top_t *values, scws_io_size_t *start)
 {
 	int i = *start;
 
@@ -1313,9 +1313,7 @@ static void _tops_load_node(node_t node, scws_top_t *values, int *start)
 
 static void _tops_load_all(xtree_t xt, scws_top_t *values)
 {
-	int i, start;
-	
-	for (i = 0, start = 0; i < xt->prime; i++)	
+	for (scws_io_size_t i = 0, start = 0; i < xt->prime; i++)	
 		_tops_load_node(xt->trees[i], values, &start);
 }
 

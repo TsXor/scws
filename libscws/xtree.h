@@ -12,6 +12,37 @@
 extern "C" {
 #endif
 
+#include "xsize.h"
+
+// mini copy of https://github.com/mpdn/bitcount
+// put in header to share with xdb
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+#include <intrin.h>
+#pragma intrinsic(_BitScanForward)
+#endif
+
+static inline unsigned int _bit_ctzll(unsigned long long v) {
+#if defined(__GNUC__) || defined(__clang__)
+	return (unsigned int)__builtin_ctzll(v);
+#elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+	unsigned long result;
+	#if defined(_M_X64)
+	_BitScanForward64(&result, v);
+	#else
+	_BitScanForward(&result, v);
+	#endif
+	return result;
+#else
+	//see http://graphics.stanford.edu/~seander/bithacks.html#ZerosOnRightMultLookup
+	static const unsigned int MultiplyDeBruijnBitPosition[32] = 
+	{
+		0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8, 
+		31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
+	};
+	return MultiplyDeBruijnBitPosition[((uint32_t)((v & -(int)v) * 0x077CB531U)) >> 27];
+#endif
+}
+
 /* pool required */
 #include "pool.h"
 
@@ -21,7 +52,7 @@ struct tree_node
 {
 	char *key;
 	void *value;
-	int vlen;
+	scws_io_size_t vlen;
 	node_t left;
 	node_t right;
 };
@@ -29,22 +60,22 @@ struct tree_node
 typedef struct 
 {	
 	pool_t p;		/* pool for memory manager */
-	int base;		/* base number for hasher (prime number recommend) */
-	int prime;		/* good prime number for hasher */
-	int count;		/* total nodes */
+	scws_io_size_t base;	/* base number for hasher (prime number recommend) */
+	scws_io_size_t prime;	/* good prime number for hasher */
+	scws_io_size_t count;	/* total nodes */
 	node_t *trees;	/* trees [total=prime+1] */
 }	xtree_st, *xtree_t;
 
 /* xtree: api */
-int xtree_hasher(xtree_t xt, const char *key, int len);
-xtree_t xtree_new(int base, int prime);	/* create a new hasxtree */
+// int xtree_hasher(xtree_t xt, const char *key, scws_io_size_t len);
+xtree_t xtree_new(scws_io_size_t base, scws_io_size_t prime);	/* create a new hasxtree */
 void xtree_free(xtree_t xt);			/* delete & free xthe xtree */
 
 void xtree_put(xtree_t xt, const char *value, const char *key);
-void xtree_nput(xtree_t xt, void *value, int vlen, const char *key, int len);
+void xtree_nput(xtree_t xt, void *value, scws_io_size_t vlen, const char *key, scws_io_size_t len);
 
-void *xtree_get(xtree_t xt, const char *key, int *vlen);
-void *xtree_nget(xtree_t xt, const char *key, int len, int *vlen);
+void *xtree_get(xtree_t xt, const char *key, scws_io_size_t *vlen);
+void *xtree_nget(xtree_t xt, const char *key, scws_io_size_t len, scws_io_size_t *vlen);
 
 /*
 void xtree_del(xtree_t xt, const char *key);

@@ -66,7 +66,7 @@ void pool_free(pool_t p)
 	free(p);
 }
 
-void *pmalloc(pool_t p, int size)
+void *pmalloc(pool_t p, scws_max_size_t size)
 {
 	void *block;
 
@@ -98,14 +98,14 @@ void *pmalloc(pool_t p, int size)
 	return block;
 }
 
-void *pmalloc_x(pool_t p, int size, char c)
+void *pmalloc_x(pool_t p, scws_max_size_t size, char c)
 {
 	void *result = pmalloc(p, size);	
 	memset(result, c, size);
 	return result;
 }  
 
-void *pmalloc_z(pool_t p, int size)
+void *pmalloc_z(pool_t p, scws_max_size_t size)
 {
 	return pmalloc_x(p, size, 0);
 }
@@ -113,7 +113,7 @@ void *pmalloc_z(pool_t p, int size)
 char *pstrdup(pool_t p, const char *src)
 {
 	char *dst;
-	int len;
+	scws_max_size_t len;
 
 	if (src == NULL) 
 		return NULL;
@@ -124,7 +124,7 @@ char *pstrdup(pool_t p, const char *src)
 	return dst;
 }
 
-char *pstrndup(pool_t p, const char *src, int len)
+char *pstrndup(pool_t p, const char *src, scws_max_size_t len)
 {
 	char *dst;
 

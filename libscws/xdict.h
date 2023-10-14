@@ -36,6 +36,8 @@ extern "C" {
 #define	SCWS_XDICT_TXT		4		// ...
 #define	SCWS_XDICT_SET		4096	// set flag.
 
+#include "xsize.h"
+
 /* data structure for word(12bytes) */
 typedef struct scws_word
 {
@@ -64,7 +66,7 @@ xdict_t xdict_fork(xdict_t xd);
 xdict_t xdict_add(xdict_t xd, const char *fpath, int mode, unsigned char *ml);
 
 /* NOW this is ThreadSafe function */
-word_t xdict_query(xdict_t xd, const char *key, int len);
+word_t xdict_query(xdict_t xd, const char *key, scws_io_size_t len);
 
 #ifdef __cplusplus
 }
